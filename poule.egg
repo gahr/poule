@@ -1,0 +1,12 @@
+; vim: set ft=scheme ts=2 sw=2:
+
+((synopsis "Manage pools of worker processes")
+ (author "Pietro Cerutti")
+ (license "BSD")
+ (version "0.1.0")
+ (category os)
+ (dependencies mailbox matchable srfi-1 srfi-18)
+ (test-dependencies test)
+ (platform (or linux unix))
+ (component-options (csc-options "-O3" "-d0"))
+ (components (extension poule)))
