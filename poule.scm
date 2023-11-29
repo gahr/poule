@@ -104,8 +104,7 @@
         (and-let* ((n (worker-job-num w))
                    ((char-ready? (worker-in w)))
                    (j (find (lambda (j) (eq? (job-num j) n)) (poule-jobs p)))
-                   (r (handle-exceptions
-                        exn
+                   (r (handle-exceptions exn
                         (cons #f (condition->list exn))
                         (read (worker-in w)))))
           (worker-job-num-set! w #f)
@@ -114,6 +113,9 @@
           (job-result-set! j r)
           w))
       (poule-workers p)))
+
+  (define (error->printable e)
+    (if (condition? e) (condition->list e) e))
 
   (define (spawn-worker fn)
     (let-values (((p c) (create-pipe)))
@@ -124,12 +126,8 @@
             (match (read in)
               (('work x)
                (handle-exceptions exn
-                 (write/flush
-                   (cons #f (with-output-to-string (cut print-error-message exn)))
-                   out)
-                 (let* ((result (fn x))
-                        (to-write (if (eq? (void) result) #t result)))
-                   (write/flush (cons #t to-write) out)))
+                 (write/flush (cons #f (error->printable exn)) out)
+                 (write/flush (cons #t (fn x)) out))
                (loop))
               (('exit)
                (dp "got 'exit")
@@ -196,7 +194,7 @@
            (t (make-thread (cut submission p))))
       (thread-specific-set! t #t)
       (poule-submission-thread-set! p t)
-      ;#(set-finalizer! p poule-destroy)
+      (set-finalizer! p poule-destroy)
       (thread-start! t)
       p) 
     )
@@ -223,33 +221,36 @@
 
     (define backoff (make-backoff 0.1 1.05))
 
-    (define (try return)
+    ; try to get a result, return
+    ; - #f         -> result number is invalid
+    ; - (#t . val) -> result found -> return val
+    ; - (#f . #t ) -> result not found, but some worker is done ->  retry immediately
+    ; - (#f . #f ) -> result not found, no worker is done -> retry after sleeping
+    (define (try)
       (with-synchronized
         p
         (and-let* ((j (find (lambda (j) (eq? (job-num j) num)) (poule-jobs p))))
           (cond
             ((eq? 'available (job-status j))
              (dp "poule-result " num ": is ready")
-             ; TODO - how to handle failures?
-             (let ((r (job-result j)))
-               (if (car r)
-                 (return (cons #f (cdr r)))
-                 (signal (cdr r)))))
+             (match (job-result j)
+               ((#t . val) (cons #t val))
+               ((#f . val) (signal (condition `(exn location worker-process
+                                                    message ,val))))))
             ((not (null? (scan-workers p)))
              (dp "poule-result " num ": some worker is done, trying again...")
-             (return (cons #t void)))
+             (cons #f #t))
             (wait?
               (dp "poule-result " num ": worker is not done, backing off...")
-              (return (cons #t backoff)))
-            (else (return (cons #f #f)))))))
+              (cons #f #f))
+            (else (cons #t #f))))))
 
-    (let loop ((loop-policy void))
-      (loop-policy)
-      (match (call/cc try)
-        ((#t . policy)
-         (loop policy))
-        ((#f . result)
-         result))))
+    (let loop ()
+      (match (try)
+        ((#t . x ) x)   
+        ((#f . #f) (backoff) (loop))
+        ((#f . #t) (loop))
+        (#f        #f))))
 
   (define (poule-dispose-results p)
     (check-poule p 'poule-dispose-results)
@@ -289,5 +290,4 @@
               (let-values (((pid succ rc) (process-wait (worker-pid w)))) '()))
             w)
           (poule-active?-set! p #f)))))
-
   )

@@ -1,5 +1,6 @@
 (import
   (chicken base)
+  (chicken condition)
   (chicken file)
   (chicken format)
   (chicken io)
@@ -72,6 +73,14 @@
           entries)))))
 
 (test-group "result"
+  (test "wrong number"
+    #f
+    (let* ((p (poule-create (lambda (x) x) 1))
+           (r (poule-result p 12)))
+      (poule-destroy p)
+      r))
+
+
   (test-assert "math"
     (let* ((p (poule-create math-worker 10))
            (n (list-tabulate 100 (lambda _
@@ -87,3 +96,39 @@
                   n adds subs)))
       (poule-destroy p)
       res)))
+
+(test-group "failure"
+  (test "raise proper message"
+    'foo
+    (let* ((w (lambda _ (signal 'foo)))
+           (p (poule-create w 1))
+           (j (poule-submit p 'bar))
+           (r (handle-exceptions exn
+               ((condition-property-accessor 'exn 'message) exn)
+               (poule-result p j))))
+      (poule-destroy p)
+      r))
+
+  (test "raise proper condition"
+    '((exn location foo message "bar"))
+    (let* ((w (lambda _ (signal (condition '(exn location foo message "bar")))))
+           (p (poule-create w 1))
+           (j (poule-submit p 'bar))
+           (r (handle-exceptions exn
+                ((condition-property-accessor 'exn'message) exn)
+                (poule-result p j))))
+      (poule-destroy p)
+      r))
+
+  (test "unreadable object"
+    "(line 1) unreadable object"
+    (let* ((w (lambda _ (current-output-port)))
+           (p (poule-create w 1))
+           (j (poule-submit p 'bar))
+           (r (handle-exceptions exn
+                ((condition-property-accessor 'exn 'message) exn)
+                (poule-result p j))))
+      (poule-destroy p)
+      (cadr (find-tail (cut eq? 'message <>) (car r)))))
+
+  )
