@@ -22,6 +22,7 @@
     (chicken port)
     (chicken process)
     (chicken process-context posix)
+    (chicken string)
     (chicken type)
     (mailbox)
     (matchable)
@@ -105,8 +106,10 @@
                    ((char-ready? (worker-in w)))
                    (j (find (lambda (j) (eq? (job-num j) n)) (poule-jobs p)))
                    (r (handle-exceptions exn
-                        (cons #f (condition->list exn))
+                        (cons #f exn)
                         (read (worker-in w)))))
+          ; TODO - convert to condition here, so we don't have
+          ; to handle a cons with #t or #f later on?
           (worker-job-num-set! w #f)
           (job-status-set! j 'available)
           (job-arg-set! j #f) ; let it be GC'd
@@ -114,8 +117,10 @@
           w))
       (poule-workers p)))
 
-  (define (error->printable e)
-    (if (condition? e) (condition->list e) e))
+  (define (exn->string e)
+    (->string (if (condition? e)
+                (condition->list e)
+                e)))
 
   (define (spawn-worker fn)
     (let-values (((p c) (create-pipe)))
@@ -126,7 +131,7 @@
             (match (read in)
               (('work x)
                (handle-exceptions exn
-                 (write/flush (cons #f (error->printable exn)) out)
+                 (write/flush (cons #f (exn->string exn)) out)
                  (write/flush (cons #t (fn x)) out))
                (loop))
               (('exit)
@@ -235,8 +240,11 @@
              (dp "poule-result " num ": is ready")
              (match (job-result j)
                ((#t . val) (cons #t val))
-               ((#f . val) (signal (condition `(exn location worker-process
-                                                    message ,val))))))
+               ((#f . val) (signal (if (condition? val)
+                                     val
+                                     (condition `(exn
+                                                   location worker
+                                                   message ,val)))))))
             ((not (null? (scan-workers p)))
              (dp "poule-result " num ": some worker is done, trying again...")
              (cons #f #t))

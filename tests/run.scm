@@ -79,8 +79,6 @@
            (r (poule-result p 12)))
       (poule-destroy p)
       r))
-
-
   (test-assert "math"
     (let* ((p (poule-create math-worker 10))
            (n (list-tabulate 100 (lambda _
@@ -98,37 +96,27 @@
       res)))
 
 (test-group "failure"
-  (test "raise proper message"
-    'foo
-    (let* ((w (lambda _ (signal 'foo)))
-           (p (poule-create w 1))
-           (j (poule-submit p 'bar))
+  (define (handle-failure worker)
+    (let* ((p (poule-create worker 1))
+           (j (poule-submit p 'foo))
            (r (handle-exceptions exn
-               ((condition-property-accessor 'exn 'message) exn)
-               (poule-result p j))))
-      (poule-destroy p)
-      r))
-
-  (test "raise proper condition"
-    '((exn location foo message "bar"))
-    (let* ((w (lambda _ (signal (condition '(exn location foo message "bar")))))
-           (p (poule-create w 1))
-           (j (poule-submit p 'bar))
-           (r (handle-exceptions exn
-                ((condition-property-accessor 'exn'message) exn)
+                (cons
+                  ((condition-property-accessor 'exn 'location) exn)
+                  ((condition-property-accessor 'exn 'message) exn))
                 (poule-result p j))))
       (poule-destroy p)
       r))
+
+  (test "signal simple object"
+    '(worker . "bar")
+    (handle-failure (lambda _ (signal 'bar))))
+
+  (test "signal condition"
+    '(worker . "((exn location foo message bar))")
+    (handle-failure (lambda _ (signal (condition '(exn location foo message "bar"))))))
 
   (test "unreadable object"
-    "(line 1) unreadable object"
-    (let* ((w (lambda _ (current-output-port)))
-           (p (poule-create w 1))
-           (j (poule-submit p 'bar))
-           (r (handle-exceptions exn
-                ((condition-property-accessor 'exn 'message) exn)
-                (poule-result p j))))
-      (poule-destroy p)
-      (cadr (find-tail (cut eq? 'message <>) (car r)))))
+    '(#f . "(line 1) unreadable object")
+    (handle-failure (lambda _ (current-output-port))))
 
   )
