@@ -129,7 +129,7 @@
 
     (define (gc-dead)
       (define (alive? w)
-        (let-values (((pid ok st) (process-wait (worker-pid w) #t)))
+        (let-values (((pid _ _ ) (process-wait (worker-pid w) #t)))
           (zero? pid)))
       (let-values (((alive dead) (partition alive? (poule-workers p))))
         (unless (null? dead)
