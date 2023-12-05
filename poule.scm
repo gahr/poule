@@ -21,8 +21,10 @@
     (chicken gc)
     (chicken port)
     (chicken process)
+    (chicken process signal)
     (chicken process-context posix)
     (chicken string)
+    (chicken time)
     (chicken type)
     (mailbox)
     (matchable)
@@ -56,6 +58,9 @@
                  mutex
                  )
 
+  (define ping-frequency 5) ; ping each worker each 5 seconds
+  (define ping-timeout 60)  ; let a worker exit if no ping comes in 60 seconds
+
   (define worker-free?
     (complement worker-job))
 
@@ -70,12 +75,13 @@
   (define (dp . args)
     (if (poule-trace)
       (apply print
-             "[" (current-process-id) "." (thread-name (current-thread)) "] "
+             (current-seconds)
+             " [" (current-process-id) "." (thread-name (current-thread)) "] "
              args)))
 
-  (define-syntax with-synchronized
+  (define-syntax guarded-p
     (syntax-rules ()
-      ((_ p body ...)
+      ((_ body ...)
        (dynamic-wind
          (lambda ()
            (dp "mutex-lock!")
@@ -144,19 +150,39 @@
                 (condition->list e)
                 e)))
 
+  (define (elapsed? last-checkpoint-ms seconds)
+    (< (+ last-checkpoint-ms (* 1000 seconds)) (current-process-milliseconds)))
+
   (define (spawn-worker fn)
     (dp "spawn-worker")
 
     (let-values (((p c) (create-pipe)))
       (define (child)
         (let ((out (open-output-file* c))
-              (in  (open-input-file* c)))
+              (in  (open-input-file* c))
+              (last-ping (current-process-milliseconds)))
+
+          (set-signal-handler!
+            signal/alrm
+            (lambda (_)
+              (if (elapsed? last-ping ping-timeout)
+                (begin
+                  (dp "ping timeout, exiting...")
+                  (exit 0)))))
+
           (let loop ()
+            (set! last-ping (current-process-milliseconds))
+            (set-alarm! ping-timeout) 
+
             (match (read in)
               (('work x)
+               (set-alarm! 0)
                (handle-exceptions exn
                  (write/flush (cons #f (exn->string exn)) out)
                  (write/flush (cons #t (fn x)) out))
+               (loop))
+              (('ping)
+               (dp "got 'ping")
                (loop))
               (('exit)
                (dp "got 'exit")
@@ -165,7 +191,7 @@
       (match (process-fork child)
         (0 (exit))
         (n
-          (dp "spawned workwr pid " n)
+          (dp "spawned worker pid " n)
           (make-worker n (open-output-file* p) (open-input-file* p) #f)))))
 
   (define (submission p)
@@ -174,27 +200,42 @@
     (define (continue?)
       (thread-specific (current-thread)))
 
+    (define maybe-ping
+      (let ((last-ping (current-process-milliseconds)))
+        (lambda ()
+          (when (elapsed? last-ping ping-frequency)
+            (guarded-p
+              (for-each
+                (lambda (w)
+                  (dp "submit: ping " (worker-pid w))
+                  (write/flush '(ping) (worker-out w)))
+                (poule-workers p))) 
+            (set! last-ping (current-process-milliseconds))))))
+
     (let mbox-loop ()
-      (let ((j (mailbox-receive! (poule-queue p) 0.1 #f))
-            (backoff (make-backoff 0.1 1.05)))
+      (dp "mbox-loop")
+      (let ((j (mailbox-receive! (poule-queue p) ping-frequency #f)))
+        (maybe-ping)
         (cond
           ((not (continue?))
            (dp "submit: done"))
           (j
-            (let worker-loop ()
-              (cond
-                ((with-synchronized p
-                   (scan-workers p)
-                   (and-let* ((w (find worker-free? (poule-workers p))))
-                     (dp "submission: job " (job-num j) " to worker " (worker-pid w))
-                     (worker-assign! w (job-num j))
-                     (write/flush `(work ,(job-arg j)) (worker-out w))
-                     #t))
-                 (mbox-loop))
-                (else
-                  (dp "submit: no worker, backing off")
-                  (backoff)
-                  (worker-loop)))))
+            (let ((backoff (make-backoff 0.1 1.05)))
+              (dp "submit: got job " (job-num j))
+              (let worker-loop ()
+                (cond
+                  ((guarded-p
+                     (scan-workers p)
+                     (and-let* ((w (find worker-free? (poule-workers p))))
+                       (dp "submission: assigned job " (job-num j) " to worker " (worker-pid w))
+                       (worker-assign! w (job-num j))
+                       (write/flush `(work ,(job-arg j)) (worker-out w))
+                       #t))
+                   (mbox-loop))
+                  (else
+                    (dp "submit: no worker, backing off")
+                    (backoff)
+                    (worker-loop))))))
           (else
             (mbox-loop))))))
 
@@ -222,12 +263,12 @@
 
     (dp "poule-submit " arg)
 
-    (with-synchronized p
+    (guarded-p
       (let* ((n (add1 (poule-job-count p)))
              (j (make-job n
-                         'pending
-                         arg
-                         #f)))
+                          'pending
+                          arg
+                          #f)))
         (poule-job-count-set! p n)
         (poule-jobs-set! p (cons j (poule-jobs p)))
         (mailbox-send! (poule-queue p) j)
@@ -245,7 +286,7 @@
     ; - (#f . #t ) -> result not found, but some worker is done ->  retry immediately
     ; - (#f . #f ) -> result not found, no worker is done -> retry after sleeping
     (define (try)
-      (with-synchronized p
+      (guarded-p
         (and-let* ((j (find (lambda (j) (eq? (job-num j) num)) (poule-jobs p))))
           (cond
             ((eq? 'available (job-status j))
@@ -274,7 +315,7 @@
 
   (define (poule-dispose-results p)
     (check-poule p 'poule-dispose-results)
-    (with-synchronized p
+    (guarded-p
       (poule-jobs-set! p
                        (remove
                          (lambda (j) (eq? 'available (job-status j)))
@@ -286,7 +327,7 @@
     (define backoff (make-backoff 0.1 1.05))
     (let loop ()
       (when
-        (with-synchronized p
+        (guarded-p
           (scan-workers p)
           (any (lambda (j) (eq? 'pending (job-status j))) (poule-jobs p)))
         (thread-yield!)
@@ -297,7 +338,7 @@
     (dp "poule-destroy")
     (when (poule-active? p)
       (if wait? (poule-wait p))
-      (with-synchronized p
+      (guarded-p
         (thread-specific-set! (poule-submission-thread p) #f)
         (thread-yield!)
         (let ((w (poule-workers p)))
