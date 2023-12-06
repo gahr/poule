@@ -48,18 +48,18 @@
                  )
 
   (define-record poule
-                 active?  ; is this poule usable?
-                 fn       ; worker function
-                 workers  ; list of workers
-                 submission-thread
-                 queue    ; incoming jobs, for the submission thread to pick up
-                 jobs     ; pending and available jobs
-                 job-count; 
-                 mutex
+                 active?           ; is this poule usable?
+                 fn                ; worker function
+                 max-workers       ; maximum number of workers to create
+                 workers           ; list of workers
+                 submission-thread ; thread to submit jobs to workers
+                 mbox              ; mailbox for incoming jobs, for the submission thread to pick up
+                 jobs              ; pending and available jobs
+                 job-count         ; incremental number to assign each job a unique id 
+                 mutex             ; mutuate access between main process and submission thread
                  )
 
-  (define ping-frequency 5) ; ping each worker each 5 seconds
-  (define ping-timeout 60)  ; let a worker exit if no ping comes in 60 seconds
+  (define idle-timeout 15)  ; let a worker exit if no job comes in 15 seconds
 
   (define worker-free?
     (complement worker-job))
@@ -138,8 +138,7 @@
         (let-values (((pid _ _ ) (process-wait (worker-pid w) #t)))
           (zero? pid)))
       (let-values (((alive dead) (partition alive? (poule-workers p))))
-        (unless (null? dead)
-          (print (length dead) " processes are dead..."))))
+        (poule-workers-set! p alive)))
 
     (let ((reaped (reap-ready)))
       (gc-dead)
@@ -153,46 +152,48 @@
   (define (elapsed? last-checkpoint-ms seconds)
     (< (+ last-checkpoint-ms (* 1000 seconds)) (current-process-milliseconds)))
 
-  (define (spawn-worker fn)
-    (dp "spawn-worker")
+  (define (spawn-workers num fn)
+    (dp "spawn-workers")
 
-    (let-values (((p c) (create-pipe)))
-      (define (child)
-        (let ((out (open-output-file* c))
-              (in  (open-input-file* c))
-              (last-ping (current-process-milliseconds)))
+    (list-tabulate
+      num
+      (lambda (_)
+        (let-values (((p c) (create-pipe)))
+          (define (child)
+            (let ((out (open-output-file* c))
+                  (in  (open-input-file* c))
+                  (last-idle (current-process-milliseconds)))
 
-          (set-signal-handler!
-            signal/alrm
-            (lambda (_)
-              (if (elapsed? last-ping ping-timeout)
-                (begin
-                  (dp "ping timeout, exiting...")
-                  (exit 0)))))
+              (set-signal-handler!
+                signal/alrm
+                (lambda (_)
+                  (if (elapsed? last-idle idle-timeout)
+                    (begin
+                      (dp "idle timeout, exiting...")
+                      (exit 0)))))
 
-          (let loop ()
-            (set! last-ping (current-process-milliseconds))
-            (set-alarm! ping-timeout) 
+              (let loop ()
+                (set! last-idle (current-process-milliseconds))
+                (set-alarm! idle-timeout) 
 
-            (match (read in)
-              (('work x)
-               (set-alarm! 0)
-               (handle-exceptions exn
-                 (write/flush (cons #f (exn->string exn)) out)
-                 (write/flush (cons #t (fn x)) out))
-               (loop))
-              (('ping)
-               (dp "got 'ping")
-               (loop))
-              (('exit)
-               (dp "got 'exit")
-               (write/flush (cons #t #t) out))))))
+                (match (read in)
+                  (('work x)
+                   (set-alarm! 0)
+                   (handle-exceptions exn
+                     (write/flush (cons #f (exn->string exn)) out)
+                     (write/flush (cons #t (fn x)) out))
+                   (loop))
+                  (('exit)
+                   (dp "got 'exit")
+                   (write/flush (cons #t #t) out))))))
 
-      (match (process-fork child)
-        (0 (exit))
-        (n
-          (dp "spawned worker pid " n)
-          (make-worker n (open-output-file* p) (open-input-file* p) #f)))))
+          (match (process-fork child)
+            (0 (exit))
+            (n
+              (dp "spawned worker pid " n)
+              (make-worker n (open-output-file* p) (open-input-file* p) #f))))
+
+        )))
 
   (define (submission p)
     (dp "submission")
@@ -200,22 +201,9 @@
     (define (continue?)
       (thread-specific (current-thread)))
 
-    (define maybe-ping
-      (let ((last-ping (current-process-milliseconds)))
-        (lambda ()
-          (when (elapsed? last-ping ping-frequency)
-            (guarded-p
-              (for-each
-                (lambda (w)
-                  (dp "submit: ping " (worker-pid w))
-                  (write/flush '(ping) (worker-out w)))
-                (poule-workers p))) 
-            (set! last-ping (current-process-milliseconds))))))
-
     (let mbox-loop ()
       (dp "mbox-loop")
-      (let ((j (mailbox-receive! (poule-queue p) ping-frequency #f)))
-        (maybe-ping)
+      (let ((j (mailbox-receive! (poule-mbox p) 1.0 #f)))
         (cond
           ((not (continue?))
            (dp "submit: done"))
@@ -232,11 +220,23 @@
                        (write/flush `(work ,(job-arg j)) (worker-out w))
                        #t))
                    (mbox-loop))
+                  ((guarded-p
+                     (if (> (poule-max-workers p) (length (poule-workers p)))
+                       (begin
+                         (dp "submit: no worker, spawning a new one")
+                         (poule-workers-set!
+                           p
+                           (append (poule-workers p)
+                                   (spawn-workers 1 (poule-fn p))))
+                         #t)
+                       #f))
+                   (worker-loop))
                   (else
                     (dp "submit: no worker, backing off")
                     (backoff)
                     (worker-loop))))))
           (else
+            (thread-yield!)
             (mbox-loop))))))
 
   (define (poule-create fn num)
@@ -245,7 +245,8 @@
 
     (let* ((p (make-poule #t
                           fn
-                          (list-tabulate num (lambda (n) (spawn-worker fn)))
+                          num
+                          (spawn-workers num fn)
                           #f ; created later
                           (make-mailbox)
                           '()
@@ -271,7 +272,7 @@
                           #f)))
         (poule-job-count-set! p n)
         (poule-jobs-set! p (cons j (poule-jobs p)))
-        (mailbox-send! (poule-queue p) j)
+        (mailbox-send! (poule-mbox p) j)
         n)))
 
   (define (poule-result p num #!optional (wait? #t))
