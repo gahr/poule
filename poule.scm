@@ -52,14 +52,13 @@
                  fn                ; worker function
                  max-workers       ; maximum number of workers to create
                  workers           ; list of workers
+                 idle-timeout      ; let workers die after so many idle seconds
                  submission-thread ; thread to submit jobs to workers
                  mbox              ; mailbox for incoming jobs, for the submission thread to pick up
                  jobs              ; pending and available jobs
                  job-count         ; incremental number to assign each job a unique id 
                  mutex             ; mutuate access between main process and submission thread
                  )
-
-  (define idle-timeout 15)  ; let a worker exit if no job comes in 15 seconds
 
   (define worker-free?
     (complement worker-job))
@@ -117,32 +116,38 @@
     (dp "scan-workers")
 
     (define (reap-ready)
-      (filter-map
-        (lambda (w)
-          (and-let* ((n (worker-job w))
-                     ((char-ready? (worker-in w)))
-                     (j (find (lambda (j) (eq? (job-num j) n)) (poule-jobs p)))
-                     (r (handle-exceptions exn
-                          (cons #f exn)
-                          (read (worker-in w)))))
-            ; TODO - convert to condition here, so we don't have
-            ; to handle a cons with #t or #f later on?
-            (worker-unassign! w)
-            (job-status-set! j 'available)
-            (job-arg-set! j #f) ; let it be GC'd
-            (job-result-set! j r)))
-        (poule-workers p)))
+      (dp "reap-ready")
+      (pair?
+        (filter-map
+          (lambda (w)
+            (and-let* ((n (worker-job w))
+                       ((char-ready? (worker-in w)))
+                       (j (find (lambda (j) (eq? (job-num j) n)) (poule-jobs p)))
+                       (r (handle-exceptions exn
+                            (cons #f exn)
+                            (read (worker-in w)))))
+              ; TODO - convert to condition here, so we don't have
+              ; to handle a cons with #t or #f later on?
+              (worker-unassign! w)
+              (job-status-set! j 'available)
+              (job-arg-set! j #f) ; let it be GC'd
+              (job-result-set! j r)))
+          (poule-workers p))))
 
     (define (gc-dead)
       (define (alive? w)
         (let-values (((pid _ _ ) (process-wait (worker-pid w) #t)))
           (zero? pid)))
       (let-values (((alive dead) (partition alive? (poule-workers p))))
-        (poule-workers-set! p alive)))
+        (poule-workers-set!
+          p
+          (if (pair? alive)
+            alive
+            (list (spawn-worker (poule-fn p) (poule-idle-timeout p)))))))
 
-    (let ((reaped (reap-ready)))
+    (let ((any-reaped? (reap-ready)))
       (gc-dead)
-      (not (null? reaped))))
+      any-reaped?))
 
   (define (exn->string e)
     (->string (if (condition? e)
@@ -152,48 +157,43 @@
   (define (elapsed? last-checkpoint-ms seconds)
     (< (+ last-checkpoint-ms (* 1000 seconds)) (current-process-milliseconds)))
 
-  (define (spawn-workers num fn)
-    (dp "spawn-workers")
+  (define (spawn-worker fn idle-timeout)
+    (dp "spawn-worker")
 
-    (list-tabulate
-      num
-      (lambda (_)
-        (let-values (((p c) (create-pipe)))
-          (define (child)
-            (let ((out (open-output-file* c))
-                  (in  (open-input-file* c))
-                  (last-idle (current-process-milliseconds)))
+    (let-values (((p c) (create-pipe)))
+      (define (child)
+        (let ((out (open-output-file* c))
+              (in  (open-input-file* c))
+              (last-idle (current-process-milliseconds)))
 
-              (set-signal-handler!
-                signal/alrm
-                (lambda (_)
-                  (if (elapsed? last-idle idle-timeout)
-                    (begin
-                      (dp "idle timeout, exiting...")
-                      (exit 0)))))
+          (set-signal-handler!
+            signal/alrm
+            (lambda (_)
+              (if (elapsed? last-idle idle-timeout)
+                (begin
+                  (dp "idle timeout, exiting...")
+                  (exit 0)))))
 
-              (let loop ()
-                (set! last-idle (current-process-milliseconds))
-                (set-alarm! idle-timeout) 
+          (let loop ()
+            (set! last-idle (current-process-milliseconds))
+            (set-alarm! idle-timeout) 
 
-                (match (read in)
-                  (('work x)
-                   (set-alarm! 0)
-                   (handle-exceptions exn
-                     (write/flush (cons #f (exn->string exn)) out)
-                     (write/flush (cons #t (fn x)) out))
-                   (loop))
-                  (('exit)
-                   (dp "got 'exit")
-                   (write/flush (cons #t #t) out))))))
+            (match (read in)
+              (('work x)
+               (set-alarm! 0)
+               (handle-exceptions exn
+                 (write/flush (cons #f (exn->string exn)) out)
+                 (write/flush (cons #t (fn x)) out))
+               (loop))
+              (('exit)
+               (dp "got 'exit")
+               (write/flush (cons #t #t) out))))))
 
-          (match (process-fork child)
-            (0 (exit))
-            (n
-              (dp "spawned worker pid " n)
-              (make-worker n (open-output-file* p) (open-input-file* p) #f))))
-
-        )))
+      (match (process-fork child #t)
+        (0 (exit))
+        (n
+          (dp "spawned worker pid " n)
+          (make-worker n (open-output-file* p) (open-input-file* p) #f)))))
 
   (define (submission p)
     (dp "submission")
@@ -226,8 +226,9 @@
                          (dp "submit: no worker, spawning a new one")
                          (poule-workers-set!
                            p
-                           (append (poule-workers p)
-                                   (spawn-workers 1 (poule-fn p))))
+                           (cons (spawn-worker (poule-fn p)
+                                               (poule-idle-timeout p))
+                                 (poule-workers p)))
                          #t)
                        #f))
                    (worker-loop))
@@ -239,14 +240,15 @@
             (thread-yield!)
             (mbox-loop))))))
 
-  (define (poule-create fn num)
+  (define (poule-create fn num #!optional (idle-timeout 15))
     (check-procedure fn 'poule-create)
     (check-number num 'poule-create)
 
     (let* ((p (make-poule #t
                           fn
                           num
-                          (spawn-workers num fn)
+                          (list-tabulate num (lambda (_) (spawn-worker fn idle-timeout)))
+                          idle-timeout
                           #f ; created later
                           (make-mailbox)
                           '()
@@ -299,6 +301,9 @@
                                      (condition `(exn
                                                    location worker
                                                    message ,val)))))))
+            ((null? (poule-workers p))
+             (dp "poule-result " num ": all workers have died, bailing out...")
+             #f)
             ((scan-workers p)
              (dp "poule-result " num ": some worker is done, trying again...")
              (cons #f #t))
@@ -330,7 +335,8 @@
       (when
         (guarded-p
           (scan-workers p)
-          (any (lambda (j) (eq? 'pending (job-status j))) (poule-jobs p)))
+          (and (any (lambda (j) (eq? 'pending (job-status j))) (poule-jobs p))
+               (not (null? (poule-workers p)))))
         (thread-yield!)
         (backoff)
         (loop))))
