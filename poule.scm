@@ -1,7 +1,8 @@
 (module (poule)
   
+  ;
   ; exports
-  
+  ;
   (
    poule?
    poule-create
@@ -12,7 +13,9 @@
    poule-destroy
    poule-trace)
 
+  ;
   ; imports
+  ;
   (import
     (scheme)
     (chicken base)
@@ -31,7 +34,9 @@
     (srfi-1)
     (srfi-18))
 
+  ;
   ; types
+  ;
   (define-record job
                  num      ; job number, incrementally allocated
                  status   ; 'pending or 'available
@@ -60,17 +65,16 @@
                  mutex             ; mutuate access between main process and submission thread
                  )
 
-  (define worker-free?
-    (complement worker-job))
-
-  (define (worker-assign! w n)
-    (worker-job-set! w n))
-
-  (define (worker-unassign! w)
-    (worker-job-set! w #f))
-
   (define poule-trace (make-parameter #f))
 
+  ;
+  ; a free worker has a #f job
+  ;
+  (define worker-free?         (complement worker-job))
+  (define (worker-assign! w n) (worker-job-set! w n))
+  (define (worker-unassign! w) (worker-job-set! w #f))
+
+  ; debug print
   (define (dp . args)
     (if (poule-trace)
       (apply print
@@ -78,6 +82,7 @@
              " [" (current-process-id) "." (thread-name (current-thread)) "] "
              args)))
 
+  ; guard some expressions with the poule mutex
   (define-syntax guarded-p
     (syntax-rules ()
       ((_ body ...)
@@ -90,6 +95,9 @@
            (dp "mutex-unlock!")
            (mutex-unlock! (poule-mutex p)))))))
 
+  ;
+  ; helpers
+  ;
   (define (write/flush obj port)
     (write obj port)
     (flush-output port))
@@ -100,6 +108,18 @@
       (thread-sleep! initial)
       (set! initial (exact->inexact (* initial multiplier)))))
 
+  (define (exn->string e)
+    (->string (if (condition? e)
+                (condition->list e)
+                e)))
+
+  (define (elapsed? last-checkpoint-ms seconds)
+    (< (+ last-checkpoint-ms (* 1000 seconds)) (current-process-milliseconds)))
+
+
+  ;
+  ; arguments checkers
+  ;
   (define (check-poule p loc)
     (unless (and (poule? p) (poule-active? p))
       (signal (condition `(exn location ,loc message "invalid poule")))))
@@ -112,6 +132,47 @@
     (unless (procedure? p)
       (signal (condition `(exn location ,loc message "invalid procedure")))))
 
+  ; fork a new worker process
+  (define (spawn-worker fn idle-timeout)
+    (dp "spawn-worker")
+
+    (let-values (((p c) (create-pipe)))
+      (define (child)
+        (let ((out (open-output-file* c))
+              (in  (open-input-file* c))
+              (last-idle (current-process-milliseconds)))
+
+          (set-signal-handler!
+            signal/alrm
+            (lambda (_)
+              (when (elapsed? last-idle idle-timeout)
+                (dp "idle timeout, exiting...")
+                (exit 0))))
+
+          (let loop ()
+            (set! last-idle (current-process-milliseconds))
+            (set-alarm! idle-timeout) 
+
+            (match (read in)
+              (('work x)
+               (set-alarm! 0)
+               (handle-exceptions exn
+                 (write/flush (cons #f (exn->string exn)) out)
+                 (write/flush (cons #t (fn x)) out))
+               (loop))
+              (('exit)
+               (dp "got 'exit")
+               (write/flush (cons #t #t) out))))))
+
+      (match (process-fork child #t)
+        (0 (exit))
+        (n
+          (dp "spawned worker pid " n)
+          (make-worker n (open-output-file* p) (open-input-file* p) #f)))))
+
+  ; gather results from ready workers, kill dead workers, make sure we always
+  ; have at least one worker alive
+  ; FIXME - this does a bunch of things, it would be best to refactor it a bit
   (define (scan-workers p)
     (dp "scan-workers")
 
@@ -149,52 +210,7 @@
       (gc-dead)
       any-reaped?))
 
-  (define (exn->string e)
-    (->string (if (condition? e)
-                (condition->list e)
-                e)))
-
-  (define (elapsed? last-checkpoint-ms seconds)
-    (< (+ last-checkpoint-ms (* 1000 seconds)) (current-process-milliseconds)))
-
-  (define (spawn-worker fn idle-timeout)
-    (dp "spawn-worker")
-
-    (let-values (((p c) (create-pipe)))
-      (define (child)
-        (let ((out (open-output-file* c))
-              (in  (open-input-file* c))
-              (last-idle (current-process-milliseconds)))
-
-          (set-signal-handler!
-            signal/alrm
-            (lambda (_)
-              (if (elapsed? last-idle idle-timeout)
-                (begin
-                  (dp "idle timeout, exiting...")
-                  (exit 0)))))
-
-          (let loop ()
-            (set! last-idle (current-process-milliseconds))
-            (set-alarm! idle-timeout) 
-
-            (match (read in)
-              (('work x)
-               (set-alarm! 0)
-               (handle-exceptions exn
-                 (write/flush (cons #f (exn->string exn)) out)
-                 (write/flush (cons #t (fn x)) out))
-               (loop))
-              (('exit)
-               (dp "got 'exit")
-               (write/flush (cons #t #t) out))))))
-
-      (match (process-fork child #t)
-        (0 (exit))
-        (n
-          (dp "spawned worker pid " n)
-          (make-worker n (open-output-file* p) (open-input-file* p) #f)))))
-
+  ; submission thread
   (define (submission p)
     (dp "submission")
 
@@ -240,6 +256,9 @@
             (thread-yield!)
             (mbox-loop))))))
 
+  ;
+  ; POULE API
+  ;
   (define (poule-create fn num #!optional (idle-timeout 15))
     (check-procedure fn 'poule-create)
     (check-number num 'poule-create)
