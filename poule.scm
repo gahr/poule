@@ -61,7 +61,7 @@
                  idle-timeout      ; let workers die after so many idle seconds
                  submission-thread ; thread to submit jobs to workers
                  mbox              ; mailbox for incoming jobs, for the submission thread to pick up
-                 jobs              ; pending and available jobs
+                 jobs              ; list of submitted jobs
                  job-count         ; incremental number to assign each job a unique id 
                  mutex             ; mutuate access between main process and submission thread
                  )
@@ -389,13 +389,13 @@
              (j (poule-jobs p))
              (idle (length (filter worker-free? w)))
              (busy (- (length w) idle))
-             (available (length (filter job-ready? j)))
-             (pending (- (length j) available)))
+             (ready (length (filter job-ready? j)))
+             (pending (- (length j) ready)))
         `((submitted-jobs ,(poule-job-count p))
           (pending-jobs ,(mailbox-count (poule-mbox p)))
           (busy-workers ,busy)
           (idle-workers ,idle)
-          (available-results ,available)
+          (ready-results ,ready)
           (pending-results ,pending)))))
 
   )
