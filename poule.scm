@@ -11,6 +11,7 @@
    poule-dispose-results
    poule-wait
    poule-destroy
+   poule-stats
    poule-trace)
 
   ;
@@ -35,13 +36,13 @@
     (srfi-18))
 
   ;
-  ; types
+  ; records
   ;
   (define-record job
-                 num      ; job number, incrementally allocated
-                 status   ; 'pending or 'available
-                 arg      ; argument of the worker function
-                 result   ; result from the worker function
+                 num    ; job number, incrementally allocated
+                 arg    ; argument of the worker function
+                 result ; result from the worker function
+                 ready? ; is the result ready?
                  )
 
 
@@ -64,6 +65,19 @@
                  job-count         ; incremental number to assign each job a unique id 
                  mutex             ; mutuate access between main process and submission thread
                  )
+
+  ;
+  ; types
+  ;
+  (define-type poule (struct poule))
+
+  (: poule-create (('a -> 'b) fixnum #!optional fixnum -> poule))
+  (: poule-submit (poule 'a -> fixnum))
+  (: poule-result (poule fixnum #!optional boolean -> (or 'b false)))
+  (: poule-dispose-results (poule -> undefined))
+  (: poule-flush (poule -> undefined))
+  (: poule-destroy (poule #!optional boolean -> undefined))
+  (: poule-stats (poule -> (list-of (pair symbol undefined))))
 
   (define poule-trace (make-parameter #f))
 
@@ -190,7 +204,7 @@
               ; TODO - convert to condition here, so we don't have
               ; to handle a cons with #t or #f later on?
               (worker-unassign! w)
-              (job-status-set! j 'available)
+              (job-ready?-set! j #t)
               (job-arg-set! j #f) ; let it be GC'd
               (job-result-set! j r)))
           (poule-workers p))))
@@ -287,10 +301,7 @@
 
     (guarded-p
       (let* ((n (add1 (poule-job-count p)))
-             (j (make-job n
-                          'pending
-                          arg
-                          #f)))
+             (j (make-job n arg #f #f)))
         (poule-job-count-set! p n)
         (poule-jobs-set! p (cons j (poule-jobs p)))
         (mailbox-send! (poule-mbox p) j)
@@ -311,7 +322,7 @@
       (guarded-p
         (and-let* ((j (find (lambda (j) (eq? (job-num j) num)) (poule-jobs p))))
           (cond
-            ((eq? 'available (job-status j))
+            ((job-ready? j)
              (dp "poule-result " num " is ready")
              (match (job-result j)
                ((and (#t . val) res) res)
@@ -341,10 +352,7 @@
   (define (poule-dispose-results p)
     (check-poule p 'poule-dispose-results)
     (guarded-p
-      (poule-jobs-set! p
-                       (remove
-                         (lambda (j) (eq? 'available (job-status j)))
-                         (poule-jobs p)))))
+      (poule-jobs-set! p (remove job-ready? (poule-jobs p)))))
 
   (define (poule-wait p)
     (check-poule p 'poule-wait)
@@ -354,7 +362,7 @@
       (when
         (guarded-p
           (scan-workers p)
-          (and (any (lambda (j) (eq? 'pending (job-status j))) (poule-jobs p))
+          (and (any (complement job-ready?) (poule-jobs p))
                (not (null? (poule-workers p)))))
         (thread-yield!)
         (backoff)
@@ -374,4 +382,20 @@
               (let-values (((pid succ rc) (process-wait (worker-pid w)))) '()))
             w)
           (poule-active?-set! p #f)))))
+
+  (define (poule-stats p)
+    (guarded-p
+      (let* ((w (poule-workers p))
+             (j (poule-jobs p))
+             (idle (length (filter worker-free? w)))
+             (busy (- (length w) idle))
+             (available (length (filter job-ready? j)))
+             (pending (- (length j) available)))
+        `((submitted-jobs ,(poule-job-count p))
+          (pending-jobs ,(mailbox-count (poule-mbox p)))
+          (busy-workers ,busy)
+          (idle-workers ,idle)
+          (available-results ,available)
+          (pending-results ,pending)))))
+
   )
