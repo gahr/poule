@@ -33,43 +33,46 @@
     (mailbox)
     (matchable)
     (srfi-1)
-    (srfi-18))
+    (srfi-18)
+    (typed-records))
+
+  (define-syntax rtype
+    (syntax-rules ()
+      ((_ name body ...)
+       (begin
+         (define-record name body ...)
+         (define-type name (struct name))))))
 
   ;
   ; records
   ;
-  (define-record job
-                 num    ; job number, incrementally allocated
-                 arg    ; argument of the worker function
-                 result ; result from the worker function
-                 ready? ; is the result ready?
-                 )
+  (rtype job
+         (num    : fixnum)  ; job number, incrementally allocated
+         (arg    : *)       ; argument of the worker function
+         (result : *)       ; result from the worker function
+         (ready? : boolean) ; is the result ready?
+         )
 
 
-  (define-record worker
-                 pid      ; pid of the child process
-                 out      ; parent -> child output port
-                 in       ; child -> parent input port
-                 job      ; currently assigned job number, or #f if worker is free
-                 )
+  (rtype worker
+         (pid : fixnum)            ; pid of the child process
+         (out : output-port)       ; parent -> child output port
+         (in  : input-port)        ; child -> parent input port
+         (job : (or fixnum false)) ; currently assigned job number, or #f if worker is free
+         )
 
-  (define-record poule
-                 active?           ; is this poule usable?
-                 fn                ; worker function
-                 max-workers       ; maximum number of workers to create
-                 workers           ; list of workers
-                 idle-timeout      ; let workers die after so many idle seconds
-                 submission-thread ; thread to submit jobs to workers
-                 mbox              ; mailbox for incoming jobs, for the submission thread to pick up
-                 jobs              ; list of submitted jobs
-                 job-count         ; incremental number to assign each job a unique id 
-                 mutex             ; mutuate access between main process and submission thread
-                 )
-
-  ;
-  ; types
-  ;
-  (define-type poule (struct poule))
+  (rtype poule
+         (active?           : boolean)           ; is this poule usable?
+         (fn                : procedure)         ; worker function
+         (max-workers       : fixnum)            ; maximum number of workers to create
+         (workers           : (list-of worker))  ; list of workers
+         (idle-timeout      : fixnum)            ; let workers die after so many idle seconds
+         (submission-thread : (or thread false)) ; thread to submit jobs to workers
+         (mbox              : (struct mailbox))  ; mailbox for incoming jobs, for the submission thread to pick up
+         (jobs              : (list-of job))     ; list of submitted jobs
+         (job-count         : fixnum)            ; incremental number to assign each job a unique id
+         (mutex             : (struct mutex))    ; mutuate access between main process and submission thread
+         )
 
   (: poule-create (('a -> 'b) fixnum #!optional fixnum -> poule))
   (: poule-submit (poule 'a -> fixnum))
