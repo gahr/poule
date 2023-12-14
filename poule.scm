@@ -67,7 +67,7 @@
          (max-workers       : fixnum)            ; maximum number of workers to create
          (workers           : (list-of worker))  ; list of workers
          (idle-timeout      : fixnum)            ; let workers die after so many idle seconds
-         (submission-thread : (or thread false)) ; thread to submit jobs to workers
+         (submission-thread : thread)            ; thread to submit jobs to workers
          (mbox              : (struct mailbox))  ; mailbox for incoming jobs, for the submission thread to pick up
          (jobs              : (list-of job))     ; list of submitted jobs
          (job-count         : fixnum)            ; incremental number to assign each job a unique id
@@ -280,19 +280,19 @@
     (check-procedure fn 'poule-create)
     (check-number num 'poule-create)
 
-    (let* ((p (make-poule #t
-                          fn
-                          num
-                          (list-tabulate num (lambda (_) (spawn-worker fn idle-timeout)))
-                          idle-timeout
-                          #f ; created later
-                          (make-mailbox)
-                          '()
-                          0
-                          (make-mutex)))
-           (t (make-thread (cut submission p))))
+    (letrec* ((t (make-thread (cut submission p)))
+              (p (make-poule #t
+                             fn
+                             num
+                             (list-tabulate num (lambda (_) (spawn-worker fn idle-timeout)))
+                             idle-timeout
+                             t
+                             (make-mailbox)
+                             '()
+                             0
+                             (make-mutex))))
+
       (thread-specific-set! t #t)
-      (poule-submission-thread-set! p t)
       (set-finalizer! p poule-destroy)
       (thread-start! t)
       p))
