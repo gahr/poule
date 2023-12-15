@@ -40,47 +40,47 @@
     (syntax-rules ()
       ((_ name body ...)
        (begin
-         (define-record name body ...)
+         (defstruct name body ...)
          (define-type name (struct name))))))
 
   ;
   ; records
   ;
   (rtype job
-         (num    : fixnum)  ; job number, incrementally allocated
-         (arg    : *)       ; argument of the worker function
-         (result : *)       ; result from the worker function
-         (ready? : boolean) ; is the result ready?
+         (num         : fixnum)  ; job number, incrementally allocated
+         (arg         : *)       ; argument of the worker function
+         ((result #f) : *)       ; result from the worker function
+         ((ready? #f) : boolean) ; is the result ready?
          )
 
 
   (rtype worker
-         (pid : fixnum)            ; pid of the child process
-         (out : output-port)       ; parent -> child output port
-         (in  : input-port)        ; child -> parent input port
-         (job : (or fixnum false)) ; currently assigned job number, or #f if worker is free
+         (pid      : fixnum)            ; pid of the child process
+         (out      : output-port)       ; parent -> child output port
+         (in       : input-port)        ; child -> parent input port
+         ((job #f) : (or fixnum false)) ; currently assigned job number, or #f if worker is free
          )
 
   (rtype poule
-         (active?           : boolean)           ; is this poule usable?
-         (fn                : procedure)         ; worker function
-         (max-workers       : fixnum)            ; maximum number of workers to create
-         (workers           : (list-of worker))  ; list of workers
-         (idle-timeout      : fixnum)            ; let workers die after so many idle seconds
-         (submission-thread : thread)            ; thread to submit jobs to workers
-         (mbox              : (struct mailbox))  ; mailbox for incoming jobs, for the submission thread to pick up
-         (jobs              : (list-of job))     ; list of submitted jobs
-         (job-count         : fixnum)            ; incremental number to assign each job a unique id
-         (mutex             : (struct mutex))    ; mutuate access between main process and submission thread
+         ((active? #t)          : boolean)           ; is this poule usable?
+         (fn                    : procedure)         ; worker function
+         (max-workers           : fixnum)            ; maximum number of workers to create
+         (workers               : (list-of worker))  ; list of workers
+         (idle-timeout          : fixnum)            ; let workers die after so many idle seconds
+         (submission-thread     : thread)            ; thread to submit jobs to workers
+         ((mbox (make-mailbox)) : (struct mailbox))  ; mailbox for incoming jobs, for the submission thread to pick up
+         ((jobs '())            : (list-of job))     ; list of submitted jobs
+         ((job-count 0)         : fixnum)            ; incremental number to assign each job a unique id
+         ((mutex (make-mutex))  : (struct mutex))    ; mutuate access between main process and submission thread
          )
 
-  (: poule-create (('a -> 'b) fixnum #!optional fixnum -> poule))
-  (: poule-submit (poule 'a -> fixnum))
-  (: poule-result (poule fixnum #!optional boolean -> (or 'b false)))
+  (: poule-create          (('a -> 'b) fixnum #!optional fixnum -> poule))
+  (: poule-submit          (poule 'a -> fixnum))
+  (: poule-result          (poule fixnum #!optional boolean -> (or 'b false)))
   (: poule-dispose-results (poule -> undefined))
-  (: poule-flush (poule -> undefined))
-  (: poule-destroy (poule #!optional boolean -> undefined))
-  (: poule-stats (poule -> (list-of (pair symbol undefined))))
+  (: poule-flush           (poule -> undefined))
+  (: poule-destroy         (poule #!optional boolean -> undefined))
+  (: poule-stats           (poule -> (list-of (pair symbol undefined))))
 
   (define poule-trace (make-parameter #f))
 
@@ -133,6 +133,10 @@
   (define (elapsed? last-checkpoint-ms seconds)
     (< (+ last-checkpoint-ms (* 1000 seconds)) (current-process-milliseconds)))
 
+  (define (next-job-number p)
+    (let ((n (add1 (poule-job-count p))))
+      (poule-job-count-set! p n)
+      n))
 
   ;
   ; arguments checkers
@@ -185,7 +189,9 @@
         (0 (exit))
         (n
           (dp "spawned worker pid " n)
-          (make-worker n (open-output-file* p) (open-input-file* p) #f)))))
+          (make-worker pid: n
+                       out: (open-output-file* p)
+                       in:  (open-input-file* p))))))
 
   ; gather results from ready workers, kill dead workers, make sure we always
   ; have at least one worker alive
@@ -244,9 +250,9 @@
             (let ((backoff (make-backoff 0.1 1.05)))
               (dp "submit: got job " (job-num j))
               (let worker-loop ()
+                (guarded-p (scan-workers p))
                 (cond
                   ((guarded-p
-                     (scan-workers p)
                      (and-let* ((w (find worker-free? (poule-workers p))))
                        (dp "submission: assigned job " (job-num j) " to worker " (worker-pid w))
                        (worker-assign! w (job-num j))
@@ -281,17 +287,11 @@
     (check-number num 'poule-create)
 
     (letrec* ((t (make-thread (cut submission p)))
-              (p (make-poule #t
-                             fn
-                             num
-                             (list-tabulate num (lambda (_) (spawn-worker fn idle-timeout)))
-                             idle-timeout
-                             t
-                             (make-mailbox)
-                             '()
-                             0
-                             (make-mutex))))
-
+              (p (make-poule fn:                fn
+                             max-workers:       num
+                             workers:           (list-tabulate num (lambda (_) (spawn-worker fn idle-timeout)))
+                             idle-timeout:      idle-timeout
+                             submission-thread: t)))
       (thread-specific-set! t #t)
       (set-finalizer! p poule-destroy)
       (thread-start! t)
@@ -303,8 +303,8 @@
     (dp "poule-submit " arg)
 
     (guarded-p
-      (let* ((n (add1 (poule-job-count p)))
-             (j (make-job n arg #f #f)))
+      (let* ((n (next-job-number p))
+             (j (make-job num: n arg: arg)))
         (poule-job-count-set! p n)
         (poule-jobs-set! p (cons j (poule-jobs p)))
         (mailbox-send! (poule-mbox p) j)

@@ -8,5 +8,5 @@
  (dependencies mailbox matchable srfi-1 srfi-18 typed-records)
  (test-dependencies test)
  (platform (or linux unix))
- (component-options (csc-options "-O3" "-d0" "-strict-types"))
+ (component-options (csc-options "-O3" "-d0"))
  (components (extension poule (types-file))))
