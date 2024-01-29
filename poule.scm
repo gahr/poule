@@ -254,7 +254,7 @@
                 (cond
                   ((guarded-p
                      (and-let* ((w (find worker-free? (poule-workers p))))
-                       (dp "submission: assigned job " (job-num j) " to worker " (worker-pid w))
+                       (dp "submit: assigned job " (job-num j) " to worker " (worker-pid w))
                        (worker-assign! w (job-num j))
                        (write/flush `(work ,(job-arg j)) (worker-out w))
                        #t))
