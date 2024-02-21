@@ -9,17 +9,6 @@
   (srfi-1) 
   (srfi-18))
 
-(define-syntax int
-  (syntax-rules ()
-    ((_ opt-name param-name def desc)
-     `(opt-name
-       ,desc
-       (default ,def)
-       (value
-         (required param-name)
-         (predicated ,integer?)
-         (transformer ,string->number))))))
-
 (define-options
   (simulate)
   `(
