@@ -14,12 +14,12 @@
 
 (poule-trace #f)
 
-(define (sleep)
+(define (sleep-some)
   (let ((s (exact->inexact (/ (+ 50 (pseudo-random-integer 100)) 1000))))
     (thread-sleep! s)))
 
 (define (sleepy-worker item)
-  (sleep)
+  (sleep-some)
   "done")
 
 (define (make-temporary-directory-worker d)
@@ -30,10 +30,10 @@
 (define math-worker
   (match-lambda
     (('add x y)
-     (sleep)
+     (sleep-some)
      (+ x y))
     (('sub x y)
-     (sleep)
+     (sleep-some)
      (- x y))))
 
 (test-group "create errors"
