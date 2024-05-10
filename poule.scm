@@ -372,11 +372,13 @@
 
   (define (poule-dispose-results p)
     (check-poule p 'poule-dispose-results)
+
     (guarded-p
       (poule-jobs-set! p (remove job-ready? (poule-jobs p)))))
 
   (define (poule-wait p)
     (check-poule p 'poule-wait)
+
     (dp "poule-wait")
     (define backoff (make-backoff 0.1 1.05))
     (let loop ()
@@ -390,6 +392,9 @@
         (loop))))
 
   (define (poule-destroy p #!optional (wait? #t))
+    #;(check-poule p 'poule-destroy) ; when called from the finalizer, the poule might not be active anymore
+    (check-boolean wait? 'poule-destroy)
+
     (dp "poule-destroy")
     (when (poule-active? p)
       (if wait? (poule-wait p))
