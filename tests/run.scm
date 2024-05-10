@@ -120,3 +120,5 @@
     (handle-failure (lambda _ (current-output-port))))
 
   )
+
+(test-exit)
