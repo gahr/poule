@@ -30,6 +30,7 @@
     (chicken string)
     (chicken time)
     (chicken type)
+    (datatype)
     (mailbox)
     (matchable)
     (srfi-1)
@@ -44,13 +45,21 @@
          (define-type name (struct name))))))
 
   ;
+  ; datatypes
+  ;
+  (define-datatype result result?
+                   (result-value (val (constantly #t)))
+                   (result-error (err (constantly #t)))) 
+  (define-type result (struct result))
+
+  ;
   ; records
   ;
   (record job
-          (num         : fixnum)  ; job number, incrementally allocated
-          (arg         : *)       ; argument of the worker function
-          ((result #f) : *)       ; result from the worker function
-          ((ready? #f) : boolean) ; is the result ready?
+          (num         : fixnum)            ; job number, incrementally allocated
+          (arg         : *)                 ; argument of the worker function
+          ((result #f) : (or result false)) ; result from the worker function
+          ((ready? #f) : boolean)           ; is the result ready?
           )
 
 
@@ -208,8 +217,11 @@
                        ((char-ready? (worker-in w)))
                        (j (find (lambda (j) (eq? (job-num j) n)) (poule-jobs p)))
                        (r (handle-exceptions exn
-                            (cons #f exn)
-                            (read (worker-in w)))))
+                            (result-error exn)
+                            (let ((r (read (worker-in w))))
+                              (if (car r)
+                                (result-value (cdr r))
+                                (result-error (cdr r)))))))
               ; TODO - convert to condition here, so we don't have
               ; to handle a cons with #t or #f later on?
               (worker-unassign! w)
@@ -316,41 +328,46 @@
 
     (define backoff (make-backoff 0.1 1.05))
 
-    ; try to get a result, return
-    ; - #f         -> result number is invalid
-    ; - (#t . val) -> result found -> return val
-    ; - (#f . #t ) -> result not found, but some worker is done ->  retry immediately
-    ; - (#f . #f ) -> result not found, no worker is done -> retry after sleeping
+    (define-datatype try-result
+                     (try-ok (val (constantly #t)))
+                     (try-error)
+                     (try-retry-now)
+                     (try-retry-later))
     (define (try)
       (guarded-p
-        (and-let* ((j (find (lambda (j) (eq? (job-num j) num)) (poule-jobs p))))
-          (cond
-            ((job-ready? j)
-             (dp "poule-result " num " is ready")
-             (match (job-result j)
-               ((and (#t . val) res) res)
-               ((#f . val) (signal (if (condition? val)
-                                     val
-                                     (condition `(exn
-                                                   location worker
-                                                   message ,val)))))))
-            ((null? (poule-workers p))
-             (dp "poule-result " num ": all workers have died, bailing out...")
-             #f)
-            ((scan-workers p)
-             (dp "poule-result " num ": some worker is done, trying again...")
-             (cons #f #t))
-            (wait?
-              (dp "poule-result " num ": worker is not done, backing off...")
-              (cons #f #f))
-            (else (cons #t #f))))))
+        (let ((j (find (lambda (j) (eq? (job-num j) num)) (poule-jobs p))))
+          (if (or (not j) (null? (poule-workers p)))
+            (try-error)
+            (cond
+              ((job-ready? j)
+               (dp "poule-result " num " is ready")
+               (cases result (job-result j)
+                 (result-value (v) (try-ok v))
+                 (result-error (e) (signal (if (condition? e)
+                                             e
+                                             (condition `(exn
+                                                           location worker
+                                                           message ,e)))))))
+              ((null? (poule-workers p))
+               (dp "poule-result " num ": all workers have died, bailing out...")
+               (try-error))
+              ((scan-workers p)
+               (dp "poule-result " num ": some worker is done, trying again...")
+               (try-retry-now))
+              (wait?
+                (dp "poule-result " num ": worker is not done, backing off...")
+                (try-retry-later))
+              (else (try-ok #f)))))))
 
     (let loop ()
-      (match (try)
-        ((#t . x ) x)   
-        ((#f . #f) (backoff) (loop))
-        ((#f . #t) (loop))
-        (#f        #f))))
+      (dp "looping")
+      (let ((t (try)))
+        (dp "try: " t)
+        (cases try-result t
+          (try-ok (res) res)
+          (try-error () #f)
+          (try-retry-now () (loop))
+          (try-retry-later () (backoff) (loop))))))
 
   (define (poule-dispose-results p)
     (check-poule p 'poule-dispose-results)
