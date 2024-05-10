@@ -162,6 +162,10 @@
     (unless (procedure? p)
       (signal (condition `(exn location ,loc message "invalid procedure")))))
 
+  (define (check-boolean b loc)
+    (unless (boolean? b)
+      (signal (condition `(exn location ,loc message "invalid boolean")))))
+
   ; fork a new worker process
   (define (spawn-worker fn idle-timeout)
     (dp "spawn-worker")
@@ -195,7 +199,8 @@
                (write/flush (cons #t #t) out))))))
 
       (match (process-fork child #t)
-        (0 (exit))
+        (0
+         (exit))
         (n
           (dp "spawned worker pid " n)
           (make-worker pid: n
@@ -218,10 +223,9 @@
                        (j (find (lambda (j) (eq? (job-num j) n)) (poule-jobs p)))
                        (r (handle-exceptions exn
                             (result-error exn)
-                            (let ((r (read (worker-in w))))
-                              (if (car r)
-                                (result-value (cdr r))
-                                (result-error (cdr r)))))))
+                            (match (read (worker-in w))
+                              ((#t . val) (result-value val))
+                              ((#f . err) (result-error err))))))
               ; TODO - convert to condition here, so we don't have
               ; to handle a cons with #t or #f later on?
               (worker-unassign! w)
@@ -325,47 +329,44 @@
   (define (poule-result p num #!optional (wait? #t))
     (check-poule p 'poule-result)
     (check-number num 'poule-result)
+    (check-boolean wait? 'poule-result)
 
     (define backoff (make-backoff 0.1 1.05))
 
     (define-datatype try-result
-                     (try-ok (val (constantly #t)))
-                     (try-error)
+                     (try-done (val (constantly #t)))
                      (try-retry-now)
                      (try-retry-later))
     (define (try)
       (guarded-p
         (let ((j (find (lambda (j) (eq? (job-num j) num)) (poule-jobs p))))
           (if (or (not j) (null? (poule-workers p)))
-            (try-error)
+            (try-done #f)
             (cond
               ((job-ready? j)
                (dp "poule-result " num " is ready")
                (cases result (job-result j)
-                 (result-value (v) (try-ok v))
+                 (result-value (v) (try-done v))
                  (result-error (e) (signal (if (condition? e)
                                              e
                                              (condition `(exn
                                                            location worker
                                                            message ,e)))))))
-              ((null? (poule-workers p))
-               (dp "poule-result " num ": all workers have died, bailing out...")
-               (try-error))
               ((scan-workers p)
                (dp "poule-result " num ": some worker is done, trying again...")
                (try-retry-now))
               (wait?
                 (dp "poule-result " num ": worker is not done, backing off...")
                 (try-retry-later))
-              (else (try-ok #f)))))))
+              (else
+                (dp "poule-result " num ": worker is not done, returning")
+                (try-done #f)))))))
 
     (let loop ()
       (dp "looping")
       (let ((t (try)))
-        (dp "try: " t)
         (cases try-result t
-          (try-ok (res) res)
-          (try-error () #f)
+          (try-done (val) val)
           (try-retry-now () (loop))
           (try-retry-later () (backoff) (loop))))))
 
