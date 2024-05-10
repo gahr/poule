@@ -67,9 +67,12 @@
       (value 
         (required jobs) 
         (predicated ,integer?) 
-        (transformer ,string->number)))))
+        (transformer ,string->number)))
+    (trace
+      "Trace log" 
+      (default #f))))
 
-(poule-trace #f)
+(poule-trace trace)
 
 (define (sleep/random lo hi)
   (let ((s (exact->inexact (/ (+ lo (pseudo-random-integer (- hi lo))) 1000))))
