@@ -56,7 +56,7 @@ Pietro Cerutti
 
 <procedure>(: poule-destroy (poule #!optional boolean -> undefined))</procedure>
 
-{{(poule-destroy poule wait?)}} terminates all workers and releases the poule. If {{wait?}} is {{#t}} (the default), the function calls {{(poule-wait}}) before asking the workers to terminate.
+{{(poule-destroy poule wait?)}} terminates all workers and releases the poule. If {{wait?}} is {{#t}} (the default), the function calls {{(poule-wait}}) before asking the workers to terminate. A finalizer is set to call this function when a poule is about to be GC'd. However, because there is no guarantee that such a finalizer would be called on program exit, it is advised to always destroy poules explicitely when they are no longer needed. This makes sure worker processes are informed and can quit as soon as possible.
 
 <procedure>(: poule-stats (poule -> (list-of (pair symbol undefined))))</procedure>
 
