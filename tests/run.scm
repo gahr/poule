@@ -6,6 +6,7 @@
   (chicken io)
   (chicken process-context posix)
   (chicken random)
+  (chicken string)
   (poule)
   (test)
   (matchable)
@@ -116,9 +117,12 @@
     (handle-failure (lambda _ (signal (condition '(exn location foo message "bar"))))))
 
   (test "unreadable object"
-    '(#f . "(line 1) unreadable object")
-    (handle-failure (lambda _ (current-output-port))))
-
-  )
+    '(#f "unreadable" "object")
+    (let ((res (handle-failure (lambda _ (current-output-port)))))
+      ; csc -> "unreadable object"
+      ; csi -> "(line 1) unreadable object"
+      ; let's make sure the "unreadable object" part is there
+      (cons (car res)
+            (take-right (string-split (cdr res)) 2)))))
 
 (test-exit)
