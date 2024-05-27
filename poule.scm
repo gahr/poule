@@ -87,7 +87,6 @@
   (: poule-submit          (poule 'a -> fixnum))
   (: poule-result          (poule fixnum #!optional boolean -> (or 'b false)))
   (: poule-dispose-results (poule -> undefined))
-  (: poule-flush           (poule -> undefined))
   (: poule-destroy         (poule #!optional boolean -> undefined))
   (: poule-stats           (poule -> (list-of (pair symbol undefined))))
 
