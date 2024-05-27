@@ -1,5 +1,5 @@
 (import (poule) (scheme) (chicken base) (srfi-1))
-(let* ((p (poule-create (cut expt 2 <>) 50))
+(let* ((p (poule-create (cut expt 2 <>) 10))
        (j (list-tabulate 50 (cut poule-submit p <>)))
        (r (map (cut poule-result p <>) j)))
   (display r)
