@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>poule</title>
+<meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+<link rel="stylesheet" href="./css.css" type="text/css" />
+<link rel="icon" href="http://call-cc.org/favicon.ico" type="image/x-icon" /></head>
+<div id="content"><a href="#poule">
+<h2 id="poule">Poule</h2></a>
+<div id="toc">
+<ol>
+<li><a href="#poule">Poule</a>
+<ol>
+<li><a href="#introduction">Introduction</a></li>
+<li><a href="#example">Example</a></li>
+<li><a href="#author">Author</a></li>
+<li><a href="#repository">Repository</a></li>
+<li><a href="#api">API</a></li>
+<li><a href="#license">License</a></li>
+<li><a href="#version-history">Version History</a></li></ol></li></ol></div><a href="#introduction">
+<h3 id="introduction">Introduction</h3></a>
+<p>A poule manages a pool of worker processes, ready to execute a worker function. This function takes a single argument. Jobs are submitted to the poule by specifying an argument for the worker function. The value produced by the application of the worker function to this argument is the result of a job.</p>
+<p>Communication between the poule and the workers happens via pipes. Job arguments and results are serialized via <tt>(read)</tt> and <tt>(write)</tt>, and thus must be readable/writable scheme forms.</p><a href="#example">
+<h3 id="example">Example</h3></a>
+<p>Here's a sample program that computes the first 50 powers of two using 10 parallel processes.</p>
+<pre><tt class="highlight scheme-language"><span class="paren1">(<span class="default">import <span class="paren2">(<span class="default">poule</span>)</span> <span class="paren2">(<span class="default">scheme</span>)</span> <span class="paren2">(<span class="default">chicken base</span>)</span> <span class="paren2">(<span class="default">srfi-1</span>)</span></span>)</span>
+<span class="paren1">(<span class="default"><i><span class="symbol">let*</span></i> <span class="paren2">(<span class="default"><span class="paren3">(<span class="default">p <span class="paren4">(<span class="default">poule-create <span class="paren5">(<span class="default">cut expt 2 &lt;&gt;</span>)</span> 10</span>)</span></span>)</span>
+       <span class="paren3">(<span class="default">j <span class="paren4">(<span class="default">list-tabulate 50 <span class="paren5">(<span class="default">cut poule-submit p &lt;&gt;</span>)</span></span>)</span></span>)</span>
+       <span class="paren3">(<span class="default">r <span class="paren4">(<span class="default">map <span class="paren5">(<span class="default">cut poule-result p &lt;&gt;</span>)</span> j</span>)</span></span>)</span></span>)</span>
+  <span class="paren2">(<span class="default">display r</span>)</span>
+  <span class="paren2">(<span class="default">poule-destroy p</span>)</span></span></span></tt></pre>
+<p><tt>(1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768 65536 131072 262144 524288 1048576 2097152 4194304 8388608 16777216 33554432 67108864 134217728 268435456 536870912 1073741824 2147483648 4294967296 8589934592 17179869184 34359738368 68719476736 137438953472 274877906944 549755813888 1099511627776 2199023255552 4398046511104 8796093022208 17592186044416 35184372088832 70368744177664 140737488355328 281474976710656 562949953421312)</tt></p><a href="#author">
+<h3 id="author">Author</h3></a>
+<p>Pietro Cerutti</p><a href="#repository">
+<h3 id="repository">Repository</h3></a>
+<p><a href="https://code.ptrcrt.ch/poule" class="external">https://code.ptrcrt.ch/poule</a></p><a href="#api">
+<h3 id="api">API</h3></a><span class="definition procedure"><em>[procedure]</em> <tt>(: poule-create (('a -&gt; 'b) fixnum #!optional fixnum -&gt; poule))</tt>
+<br /></span>
+<p><tt>(poule-create fn max-workers idle-timeout)</tt> returns a poule that manages up to <tt>max-workers</tt> worker processes that can execute the function <tt>fn</tt>. It is an error if <tt>max-workers</tt> is not a positive number. Workers are created on-demand and are kept in a wait state until a job is submitted to the poule. After <tt>idle-timeout</tt> (default: 15) seconds without receiving any work to do, a worker quits.</p><span class="definition procedure"><em>[procedure]</em> <tt>(: poule-submit (poule 'a -&gt; fixnum))</tt>
+<br /></span>
+<p><tt>(poule-submit poule arg)</tt> submits a job to the <tt>poule</tt> by placing it in a submission queue and returns a <tt>jobid</tt>. The function returns immediately and the job is eventually realized in an available worker process by calling <tt>(fn arg)</tt>, where <tt>fn</tt> is the function passed to <tt>(poule-create)</tt>. The <tt>jobid</tt> can later be used to retrieve the result.</p><span class="definition procedure"><em>[procedure]</em> <tt>(: poule-result (poule fixnum #!optional boolean -&gt; (or 'b false)))</tt>
+<br /></span>
+<p><tt>(poule-result poule jobid wait?)</tt> returns the result of the job <tt>jobid</tt>. If the result is not ready yet and <tt>wait?</tt> is <tt>#t</tt> (the default), the call waits, otherwise it returns <tt>#f</tt>. If <tt>jobid</tt> is invalid (e.g., it has been disposed), the call returns <tt>#f</tt>. If the job submission resulted in an error condition being raised, <tt>(poule-result)</tt> will propagate (i.e., <tt>(signal)</tt>) the condition.</p><span class="definition procedure"><em>[procedure]</em> <tt>(: poule-dispose-results (poule -&gt; undefined))</tt>
+<br /></span>
+<p><tt>(poule-dispose-results poule)</tt> makes any ready results irretrievable.</p><span class="definition procedure"><em>[procedure]</em> <tt>(: poule-wait (poule -&gt; undefined))</tt>
+<br /></span>
+<p><tt>(poule-wait poule)</tt> waits until all submitted jobs are ready.</p><span class="definition procedure"><em>[procedure]</em> <tt>(: poule-destroy (poule #!optional boolean -&gt; undefined))</tt>
+<br /></span>
+<p><tt>(poule-destroy poule wait?)</tt> terminates all workers and releases the poule. If <tt>wait?</tt> is <tt>#t</tt> (the default), the function calls <tt>(poule-wait</tt>) before asking the workers to terminate. A finalizer is set to call this function when a poule is about to be GC'd. However, because there is no guarantee that such a finalizer would be called on program exit, it is advised to always destroy poules explicitely when they are no longer needed. This makes sure worker processes are informed and can quit as soon as possible.</p><span class="definition procedure"><em>[procedure]</em> <tt>(: poule-stats (poule -&gt; (list-of (pair symbol undefined))))</tt>
+<br /></span>
+<p><tt>(poule-stats poule)</tt> reports statistics about the poule in form of an alist. The following keys are defined:</p>
+<ul>
+<li>submitted-jobs (fixnum): number of jobs submitted since the creation of the poule</li>
+<li>pending-jobs (fixnum): number of jobs in the submission queue</li>
+<li>busy-workers (fixnum): number of busy workers</li>
+<li>idle-workers (fixnum): number of idle workers</li>
+<li>ready-results (fixnum): number of results ready for retrieval</li>
+<li>pending-results (fixnum): number of results not yet ready for retrieval</li></ul><a href="#license">
+<h3 id="license">License</h3></a>
+<pre><tt> Copyright (c) Pietro Cerutti
+ All rights reserved.
+ 
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions
+ are met:
+ 
+ 1. Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+ 2. Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+ 
+ THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ SUCH DAMAGE.</tt></pre><a href="#version-history">
+<h3 id="version-history">Version History</h3></a>
+<ul>
+<li>0.1.0 - initial release</li></ul></div></html>

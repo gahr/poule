@@ -1,0 +1,587 @@
+/* Reset from http://meyerweb.com/eric/tools/css/reset/
+   v2.0 | 20110126
+   License: none (public domain)
+*/
+html, body, div, span, applet, object, iframe,
+h1, h2, h3, h4, h5, h6, p, blockquote, pre,
+a, abbr, acronym, address, big, cite, code,
+del, dfn, em, img, ins, kbd, q, s, samp,
+small, strike, strong, sub, sup, tt, var,
+b, u, i, center,
+dl, dt, dd, ol, ul, li,
+fieldset, form, label, legend,
+table, caption, tbody, tfoot, thead, tr, th, td,
+article, aside, canvas, details, embed,
+figure, figcaption, footer, header, hgroup,
+menu, nav, output, ruby, section, summary,
+time, mark, audio, video {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	font-size: 16px;
+	font: inherit;
+	vertical-align: baseline;
+	font-variant:normal;
+}
+
+article, aside, details, figcaption, figure,
+footer, header, hgroup, menu, nav, section {
+	display: block;
+}
+
+body {
+	line-height: 1;
+}
+
+ol, ul {
+	list-style: none;
+}
+
+blockquote, q {
+	quotes: none;
+}
+
+blockquote:before, blockquote:after,
+q:before, q:after {
+	content: '';
+	content: none;
+}
+
+table {
+	border-collapse: collapse;
+	border-spacing: 0;
+}
+/* End of reset */
+body {
+    max-width:48em;
+    position:relative;
+    margin:0 auto;
+    padding:2em;
+    color:#444;
+    font-family:sans-serif;
+}
+
+h1,h2,h3,h4,h5,h6 {
+    font-weight:700;
+    color: #B64926;
+    margin-top:1.4em;
+}
+
+a:link {
+    color:#9C4320;
+}
+
+a:visited {
+    color:#8C8281;
+}
+
+em, b {
+    font-weight:700;
+}
+
+strong, i {
+    font-style:italic;
+}
+
+form input,form textarea {
+    color:#000;
+    background-color:#FFF;
+    vertical-align:middle;
+    margin:0;
+    padding:.2em;
+    border:1px solid #A0A0A0;
+    border-radius:2px;
+}
+
+form textarea {
+    font-family:monospace;
+}
+
+form input[type=hidden] {
+    border:0;
+}
+
+#menu {
+    width:100%;
+    text-align:center;
+    font-family:sans-serif;
+    margin:5em 0 0 0;
+}
+
+#menu ul {
+    list-style-type:none;
+}
+
+#menu ul li {
+    display:inline-block;
+}
+
+#menu ul li a, #menu ul li a:visited {
+    display:block;
+    color: #BF4C11;
+    font-weight:600;
+    padding:.4em .73em;
+}
+
+#menu ul li a:hover {
+    background-color:#BF4C11; 
+    color:white; /* #EFEAA2; */
+    border-radius:3px;
+}
+
+#search {	
+    float:right;
+    font-size:.7em;
+    margin-top:2.8em;
+}
+
+#search form input,#search form label {
+    margin-left:.1em;
+}
+
+#search form input[type='text'] {
+    padding:.1em;
+    width:12em;
+    height:1.2em;
+    margin-right:1em;
+    margin-left:.5em;
+}
+
+#search form input[type='text']:focus {
+    border-color:#FFBA54;
+}
+
+/* Hack for Firefox */
+#search input[type='submit']::-moz-focus-inner { 
+    border: 0; 
+    padding: 0; 
+    margin-top:0; 
+    margin-bottom:-.07em; 
+}
+
+#search form input[type='submit'] {
+    font-size:.9em;
+    text-decoration:underline;
+    background-color:#FFF;
+    padding:0 .2em .2em .2em;
+    margin-right:1em;
+    margin-left:-.5em;	
+    border:0;
+}
+
+#search form label {
+    color:#333;
+    text-transform:capitalize;
+}
+
+#search form a {
+    display:inline;
+}
+
+#page-specific-links{ 
+    margin-top:2.6em;
+    font-size:.8em;
+}
+
+#page-specific-links li {
+    display:inline;
+    padding:0 .4em 0 .1em;
+}
+
+#page-specific-links a {
+    color:#711;
+}
+
+#page-specific-links a:hover {
+    color:#FFBA54;
+}
+
+#content,#search-results {
+    font-family:sans-serif;
+    line-height:1.3; /* Don't use measures here (i.e. px, em, pt)*/
+    padding-bottom:2em;
+}
+
+#content h1,#search-results h1 {
+    font-size:1.8em;
+}
+
+#content h2,#search-results h2 {
+    font-size:1.5em;
+}
+
+#content h3,#search-results h3 {
+    font-size:1.3em;
+}
+
+#content h4,#search-results h4 {
+    font-size:1.1em;
+}
+
+#content h5,#search-results h5 {
+    font-size:1em;
+}
+
+#content h6,#search-results h6 {
+    font-size:1em;
+}
+
+/* Properly formatting text on wiki */
+#content h3 + .definition,#content h4 + .definition,#content h5 + .definition {
+    margin-top:.5em;
+}
+
+#content h3 + p,#content h4 + p,#content h5 + p {
+    margin-top:.5em;
+}
+
+#content p + h3,#content p +h4,#content p + h5 {
+    margin-top:1.3em;
+}
+
+#content pre,#search-results pre {
+    background-color:#FFFBEA;
+    margin-top:.3em;
+    padding:.75em .5em;
+    overflow:auto;
+    font-family:monospace;
+    font-size:1.25em;
+    border:solid 1px #E0E0E0;
+    border-radius:8px;
+	width:98%;
+}
+
+#content pre:first-child,#search-results pre:first-child {
+	margin-top:2em;
+}
+
+#content #captcha {
+    background-color:#FFF;
+    width:30em;
+    border:none;
+    padding:0;
+    margin:0;
+}
+
+#content tt,#search-results tt {
+    font-size:1.2em;
+    font-family:monospace;
+    font-weight:bold;
+}
+
+/* <tt> should be bold only on text - not on definitions, tables or preformatted code */
+#content .definition tt,#search-results .definition tt,
+#content pre tt,#search-results pre tt,
+#content table tt,#search-results table tt {
+    font-weight:normal;
+    font-size:1em;
+}
+
+#content table tt,#search-results table tt {
+    font-size:1.23em;
+}
+
+/* Wiki pages' table of contents formatting and numbering */
+#content ol,#content ul,#search-results ol,#search-results ul {
+    margin-left:1.5em;
+    margin-top:1em;
+}
+
+#content ol li,#content ul li,#search-results ol li,#search-results ul li {
+    list-style-position:outside;
+    margin-top:.2em;
+}
+
+#content ol li ol,#content ol li ul,#content ul li ol,#content ul li ul,
+#search-results ol li ol,#search-results ol li ul,#search-results ul li ol,#search-results ul li ul {
+    margin-top:0;
+}
+
+#content ul li,#search-results ul li {
+    list-style-type:disc;
+}
+
+#content ol li,#search-results ol li {
+    list-style-type:decimal;
+}
+
+#content dl dt,#search-results dl dt {
+    font-weight:700;
+    margin-top:.5em;
+}
+
+#content dl dd,#search-results dl dd {
+    margin-left:1em;
+}
+
+#content table:first-child {
+    margin-top:1em;
+}
+
+#content table,#search-results table {
+    margin-top:.5em;
+    border-spacing:0;
+    font-size:1em;
+    width:100%;
+}
+
+#content table tr > td,#search-results table tr > td {
+    padding-top:.3em;
+    padding-bottom:.3em;
+}
+
+#content table tr.odd,#search-results table tr.odd {
+    background-color:#FFC;
+}
+
+#content table th,#search-results table th {
+    text-align:left;
+    font-weight:700;
+    font-size:1em;
+    padding:.2em 1em .2em .2em;
+}
+
+#content table td,#search-results table td {
+    padding:.5em .2em .5em .2em;
+}
+
+#content ol.pager,#search-results ol.pager {
+    list-style-type:none;
+    display:block;
+    text-align:center;
+    margin:2em 0 0;
+    padding:0;
+}
+
+#content ol.pager li,#search-results ol.pager li {
+    display:inline;
+}
+
+#content form label {
+    display:block;
+    margin-top:1em;
+}
+
+#content form textarea {
+    width:99%;
+}
+
+#content form #auth-checkbox {
+    float:left;
+    margin-right:.5em;
+    margin-top:.2em;
+}
+
+#content .definition {
+    background-color:#FFB;
+    display:block;
+    padding:.3em .4em .4em .4em;
+    margin-top:1em;
+    margin-bottom:-.7em;
+    font-size:1.23em;
+    border:solid 1px #E0E0E0;
+    border-radius:8px;
+}
+
+#content .definition em {
+    color:#9C4320;
+    font-size:1em;
+    font-style:normal;
+    font-family:monospace;
+    font-weight:700;
+}
+
+#content .definition + .definition {
+    margin-top:-.1em;
+    border-top:0;
+    border-top-left-radius:0;
+    border-top-right-radius:0;
+}
+
+#content .highlight {
+    background-color:#FFFBEA;
+    font-size:1em;
+}
+
+#content .highlight .symbol,#content .highlight .default,#content .highlight .comment {
+    background-color:#FFFBEA;
+    color:#59443C;
+    font-weight:400;
+}
+
+#content .highlight i {
+    font-style:normal;
+}
+
+#content .highlight i .symbol {
+    color:#B64926;
+}
+
+#content .highlight .paren1,#content .highlight .paren2,#content .highlight .paren3,#content .highlight .paren4,#content .highlight .paren5,#content .highlight .paren6 {
+    background-color:inherit;
+}
+
+#content .highlight .paren1:hover,#content .highlight .paren2:hover,#content .highlight .paren3:hover,#content .highlight .paren4:hover,#content .highlight .paren5:hover,#content .highlight .paren6:hover {
+    color:#FFF;
+    font-weight:700;
+}
+
+#content .highlight .paren1:hover {
+    background-color:#DB7859;
+}
+
+#content .highlight .paren2:hover {
+    background-color:#1B804C;
+}
+
+#content .highlight .paren3:hover {
+    background-color:#9F214E;
+}
+
+#content .highlight .paren4:hover {
+    background-color:#DBA059;
+}
+
+#content .highlight .paren5:hover {
+    background-color:#B64926;
+}
+
+#content .highlight .paren6:hover {
+    background-color:#64A422;
+}
+
+#content .highlight .comment {
+    color:#8C8281;
+    font-style:italic;
+}
+
+#content p,#search-results p,#content dl,#search-results dl,#content form #actions {
+    margin:1em 0 0 0;
+}
+
+#content form #actions input,ul.tags li {
+    display:inline;
+}
+
+/* Table of contents for wiki pages */
+#toc {
+    padding-top: 0.7em;
+}
+
+#toc > ol > li {
+    list-style-type:none;
+}
+
+#toc ol {
+    counter-reset:section;
+}
+
+#toc ol li:before {
+    counter-increment:section;
+    content:counters(section,".") " ";
+}
+
+#toc ol > ol {
+    counter-reset:subsection;
+}
+
+#toc ol > ol li:before {
+    counter-increment:subsection;
+    content:counters(subsection,".") " ";
+}
+
+#toc ol li,#content form textarea,#content form input {
+    display:block;
+}
+
+ul.tags {
+    position:absolute;
+    bottom:.5em;
+    right:2.8em;
+    list-style-type:none;
+    font-size:.8em;
+}
+
+del,ins,#toc a,#menu ul li a,ul#page-specific-links li a {
+    text-decoration:none;
+}
+
+#content .highlight .string {
+    color:#9C4320;
+}
+
+/* 
+   CHICKEN logo and wordmark hardcoded - a REALLY ugly hack
+   because Chrome couldn't properly handle links to .svg files.
+*/
+
+
+/* 
+   Corner cases 
+*/
+
+/* Pages that don't have #search or #page-specific-links */
+
+/* Pages that don't have #menu, #search or #page-specific-links */
+
+/* Search results page */
+#search-results {
+   margin-top:5em;
+}
+
+/* Pastiche [1] */
+#heading {
+    margin-top:1em;
+    margin-bottom:2em;
+}
+
+/* Pastiche [2] */
+.paste-form td {
+    vertical-align: middle;
+}
+
+
+/* 
+   Mobile settings 
+*/
+@media only screen and (max-width: 767px) {
+
+    #menu {
+	width:100%;
+	text-align:center;
+	margin-top:8em;
+    }
+
+    #search {
+	width:100%;
+	text-align:center;
+	margin-top:1.5em;
+    }
+
+    #search form label { 
+	display:block;
+	margin-top:1em;
+	margin-bottom:1em;
+    }
+
+    #page-specific-links {
+	width:100%;
+	margin-top:11em;
+	margin-bottom:-1.5em;
+    }
+
+    #big-logo {
+        display:none;
+    }
+
+
+    /* Corner cases */
+    #content:first-child {
+	margin-top:9em;
+    }
+
+    #search-results {
+	margin-top:8em;
+    }
+} /* End of mobile settings */
+
