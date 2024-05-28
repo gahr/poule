@@ -15,7 +15,7 @@ tests/run: poule.so tests/run.scm
 
 docs/poule.html: docs/poule.wiki
 	svnwiki2html --title poule --css ./css.css docs/poule.wiki > docs/poule.html
-	sed -i '' "1s|^|<div class='fossil-doc' data-title='poule - CHICKEN extension to manage a pool of worker processes'>\n|" docs/poule.html
+	sed -i '' "1s|^|<div class='fossil-doc' data-title='Home'>\n|" docs/poule.html
 
 clean:
 	fossil extras | awk '!/Makefile/' | xargs rm
