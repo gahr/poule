@@ -44,7 +44,7 @@
 <br /></span>
 <p><tt>(poule-result poule jobid wait?)</tt> returns the result of the job <tt>jobid</tt>. If the result is not ready yet and <tt>wait?</tt> is <tt>#t</tt> (the default), the call waits, otherwise it returns <tt>#f</tt>. If <tt>jobid</tt> is invalid (e.g., it has been disposed), the call returns <tt>#f</tt>. If the job submission resulted in an error condition being raised, <tt>(poule-result)</tt> will propagate (i.e., <tt>(signal)</tt>) the condition.</p><span class="definition procedure"><em>[procedure]</em> <tt>(: poule-dispose-results (poule -&gt; undefined))</tt>
 <br /></span>
-<p><tt>(poule-dispose-results poule)</tt> makes any ready results irretrievable.</p><span class="definition procedure"><em>[procedure]</em> <tt>(: poule-wait (poule -&gt; undefined))</tt>
+<p><tt>(poule-dispose-results poule)</tt> makes all ready results irretrievable.</p><span class="definition procedure"><em>[procedure]</em> <tt>(: poule-wait (poule -&gt; undefined))</tt>
 <br /></span>
 <p><tt>(poule-wait poule)</tt> waits until all submitted jobs are ready.</p><span class="definition procedure"><em>[procedure]</em> <tt>(: poule-destroy (poule #!optional boolean -&gt; undefined))</tt>
 <br /></span>

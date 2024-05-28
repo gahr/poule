@@ -49,7 +49,7 @@ Pietro Cerutti
 
 <procedure>(: poule-dispose-results (poule -> undefined))</procedure>
 
-{{(poule-dispose-results poule)}} makes any ready results irretrievable.
+{{(poule-dispose-results poule)}} makes all ready results irretrievable.
 
 <procedure>(: poule-wait (poule -> undefined))</procedure>
 
