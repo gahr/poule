@@ -6,7 +6,7 @@
 
 A poule manages a pool of worker processes, ready to execute a worker function. This function takes a single argument. Jobs are submitted to the poule by specifying an argument for the worker function. The value produced by the application of the worker function to this argument is the result of a job.
 
-Communication between the poule and the workers happens via pipes. Job arguments and results are serialized via {{(read)}} and {{(write)}}, and thus must be readable/writable scheme forms.
+Communication between the poule and the workers happens via a pair of local sockets. Job arguments and results are serialized via {{(read)}} and {{(write)}}, and thus must be readable/writable scheme forms.
 
 === Example
 

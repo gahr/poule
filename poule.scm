@@ -22,6 +22,7 @@
     (chicken base)
     (chicken condition)
     (chicken file posix)
+    (chicken foreign)
     (chicken gc)
     (chicken port)
     (chicken process)
@@ -148,6 +149,19 @@
       n))
 
   ;
+  ; pipes are unidirectional on Linux, use socketpair(2)
+  ;
+  (foreign-declare "#include <sys/socket.h>")
+  (define create-bidirectional-pipe
+    (foreign-primitive ()
+      "
+      int ends[2] = { -1, -1 };
+      socketpair(PF_LOCAL, SOCK_STREAM, 0, ends);
+      C_word av[4] = { C_SCHEME_UNDEFINED, C_k, C_fix(ends[0]), C_fix(ends[1]) };
+      C_values(4, av);
+      "))
+
+  ;
   ; arguments checkers
   ;
   (define (check-poule p loc)
@@ -170,7 +184,7 @@
   (define (spawn-worker fn idle-timeout)
     (dp "spawn-worker")
 
-    (let-values (((p c) (create-pipe)))
+    (let-values (((p c) (create-bidirectional-pipe)))
       (define (child)
         (let ((out (open-output-file* c))
               (in  (open-input-file* c))
