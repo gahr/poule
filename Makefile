@@ -18,4 +18,4 @@ docs/poule.html: docs/poule.wiki
 	sed -i '' "1s|^|<div class='fossil-doc' data-title='Home'>\n|" docs/poule.html
 
 clean:
-	fossil extras | xargs rm
+	fossil clean
