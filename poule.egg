@@ -3,7 +3,7 @@
 ((synopsis "Manage pools of worker processes")
  (author "Pietro Cerutti")
  (license "BSD")
- (version "0.1.0")
+ (version "0.1.2")
  (category os)
  (dependencies datatype mailbox matchable srfi-1 srfi-18 typed-records)
  (test-dependencies test)

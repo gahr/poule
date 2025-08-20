@@ -21,7 +21,7 @@
 <li><a href="#version-history">Version History</a></li></ol></li></ol></div><a href="#introduction">
 <h3 id="introduction">Introduction</h3></a>
 <p>A poule manages a pool of worker processes, ready to execute a worker function. This function takes a single argument. Jobs are submitted to the poule by specifying an argument for the worker function. The value produced by the application of the worker function to this argument is the result of a job.</p>
-<p>Communication between the poule and the workers happens via pipes. Job arguments and results are serialized via <tt>(read)</tt> and <tt>(write)</tt>, and thus must be readable/writable scheme forms.</p><a href="#example">
+<p>Communication between the poule and the workers happens via a pair of local sockets. Job arguments and results are serialized via <tt>(read)</tt> and <tt>(write)</tt>, and thus must be readable/writable scheme forms.</p><a href="#example">
 <h3 id="example">Example</h3></a>
 <p>Here's a sample program that computes the first 50 powers of two using 10 parallel processes.</p>
 <pre><tt class="highlight scheme-language"><span class="paren1">(<span class="default">import <span class="paren2">(<span class="default">poule</span>)</span> <span class="paren2">(<span class="default">scheme</span>)</span> <span class="paren2">(<span class="default">chicken base</span>)</span> <span class="paren2">(<span class="default">srfi-1</span>)</span></span>)</span>
@@ -85,4 +85,6 @@
  SUCH DAMAGE.</tt></pre><a href="#version-history">
 <h3 id="version-history">Version History</h3></a>
 <ul>
+<li>0.1.2 - adjust for C6</li>
+<li>0.1.1 - use socketpair(2)</li>
 <li>0.1.0 - initial release</li></ul></div></html>
