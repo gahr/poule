@@ -1,3 +1,4 @@
 (repo fossil "https://code.ptrcrt.ch/{egg-name}")
 (uri targz "https://code.ptrcrt.ch/{egg-name}/tarball/{egg-name}.tar.gz?uuid=v{egg-release}")
 (release "0.1.2")
+(release "0.1.3")

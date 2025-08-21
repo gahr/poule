@@ -11,10 +11,12 @@ examples/simulate: poule.so examples/simulate.scm
 	chicken-csc examples/simulate.scm
 
 tests/run: poule.so tests/run.scm
+	chicken-install test
 	chicken-csc tests/run.scm
 
 docs/poule.html: docs/poule.wiki
-	svnwiki2html --title poule --css ./css.css docs/poule.wiki > docs/poule.html
+	chicken-install svnwiki2html && \
+	svnwiki2html --title poule --css ./css.css docs/poule.wiki > docs/poule.html && \
 	sed -i '' "1s|^|<div class='fossil-doc' data-title='Home'>\n|" docs/poule.html
 
 clean:

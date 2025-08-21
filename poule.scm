@@ -15,7 +15,7 @@
    poule-trace)
 
   ; For make-parameter
-  (cond-expand (chicken-6 (import (scheme base))))
+  (cond-expand (chicken-6 (import (scheme base))) (else))
 
   ;
   ; imports
