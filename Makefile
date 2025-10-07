@@ -1,3 +1,5 @@
+REPO=	fossil info | grep ^repository | awk '{print $$2}'
+
 test: tests/run
 	./tests/run
 
@@ -21,3 +23,16 @@ docs/poule.html: docs/poule.wiki
 
 clean:
 	fossil clean
+
+git:
+	@if [ -e git-import ]; then \
+	    echo "The 'git-import' directory already exists"; \
+	    exit 1; \
+	fi; \
+	git init -b main git-import && cd git-import && \
+	fossil export --git --rename-trunk main --repository `${REPO}` | \
+	git fast-import && git reset --hard HEAD && \
+	git remote add origin git@github.com:gahr/poule.git && \
+	git push -f origin main && \
+	cd .. && rm -rf git-import
+
